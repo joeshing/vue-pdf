@@ -10,7 +10,7 @@ export default function(pdfjsWrapper) {
 		render: function(h) {
 			return h('span', {
 				attrs: {
-					style: 'position: relative; display: inline-block'
+					style: ''
 				}
 			}, [
 				h('canvas', {
