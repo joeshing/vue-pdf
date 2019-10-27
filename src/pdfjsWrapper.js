@@ -12,9 +12,8 @@ export default function(PDFJS) {
 		var source;
 		if ( typeof(src) === 'string' )
 			source = { url: src };
-		else if ( src instanceof Uint8Array )
-			source = { data: src };
-		else if ( typeof(src) === 'object' && src !== null )
+		else
+		if ( typeof(src) === 'object' && src !== null )
 			source = Object.assign({}, src);
 		else
 			throw new TypeError('invalid src type');
@@ -76,27 +75,22 @@ export default function(PDFJS) {
 			var PRINT_UNITS = PRINT_RESOLUTION / 72.0;
 			var CSS_UNITS = 96.0 / 72.0;
 
-			var iframeElt = document.createElement('iframe');
+			var printContainerElement = document.createElement('div');
+			printContainerElement.setAttribute('id', 'print-container')
 
-			function removeIframe() {
-
-				iframeElt.parentNode.removeChild(iframeElt);
+			function removePrintContainer() {
+				printContainerElement.parentNode.removeChild(printContainerElement);
 			}
 
 			new Promise(function(resolve, reject) {
+				printContainerElement.frameBorder = '0';
+				printContainerElement.scrolling = 'no';
+				printContainerElement.width = '0px;'
+				printContainerElement.height = '0px;'
+				printContainerElement.style.cssText = 'position: absolute; top: 0; left: 0';
 
-				iframeElt.frameBorder = '0';
-				iframeElt.scrolling = 'no';
-				iframeElt.width = '0px;'
-				iframeElt.height = '0px;'
-				iframeElt.style.cssText = 'position: absolute; top: 0; left: 0';
-
-				iframeElt.onload = function() {
-
-					resolve(this.contentWindow);
-				}
-
-				window.document.body.appendChild(iframeElt);
+				window.document.body.appendChild(printContainerElement);
+				resolve(window)
 			})
 			.then(function(win) {
 
@@ -104,23 +98,23 @@ export default function(PDFJS) {
 
 				return pdfDoc.getPage(1)
 				.then(function(page) {
-
 					var viewport = page.getViewport(1);
-					win.document.head.appendChild(win.document.createElement('style')).textContent =
+					printContainerElement.appendChild(win.document.createElement('style')).textContent =
 						'@supports ((size:A4) and (size:1pt 1pt)) {' +
 							'@page { margin: 1pt; size: ' + ((viewport.width * PRINT_UNITS) / CSS_UNITS) + 'pt ' + ((viewport.height * PRINT_UNITS) / CSS_UNITS) + 'pt; }' +
 						'}' +
 
+						'#print-canvas { display: none }' +
+
 						'@media print {' +
 							'body { margin: 0 }' +
-							'canvas { page-break-before: avoid; page-break-after: always; page-break-inside: avoid }' +
+							'#print-canvas { page-break-before: avoid; page-break-after: always; page-break-inside: avoid; display: block }' +
+							'body > *:not(#print-container) { display: none; }' +
 						'}'+
 
 						'@media screen {' +
 							'body { margin: 0 }' +
-						'}'+
-
-						''
+						'}'
 					return win;
 				})
 			})
@@ -139,7 +133,8 @@ export default function(PDFJS) {
 
 							var viewport = page.getViewport(1);
 
-							var printCanvasElt = win.document.body.appendChild(win.document.createElement('canvas'));
+							var printCanvasElt = printContainerElement.appendChild(win.document.createElement('canvas'));
+							printCanvasElt.setAttribute('id', 'print-canvas')
 							printCanvasElt.width = (viewport.width * PRINT_UNITS);
 							printCanvasElt.height = (viewport.height * PRINT_UNITS);
 
@@ -158,18 +153,16 @@ export default function(PDFJS) {
 
 				Promise.all(allPages)
 				.then(function() {
-
 					win.focus(); // Required for IE
 					if (win.document.queryCommandSupported('print')) {
 						win.document.execCommand('print', false, null);
-						} else {
+					} else {
 						win.print();
-					  }
-					removeIframe();
+					}
+					removePrintContainer();
 				})
 				.catch(function(err) {
-
-					removeIframe();
+					removePrintContainer();
 					emitEvent('error', err);
 				})
 			})
@@ -188,7 +181,8 @@ export default function(PDFJS) {
 			if ( pdfPage === null )
 				return;
 
-			rotate = (pdfPage.rotate === undefined ? 0 : pdfPage.rotate) + (rotate === undefined ? 0 : rotate);
+			if ( rotate === undefined )
+				rotate = pdfPage.rotate;
 
 			var scale = canvasElt.offsetWidth / pdfPage.getViewport(1).width * (window.devicePixelRatio || 1);
 			var viewport = pdfPage.getViewport(scale, rotate);
